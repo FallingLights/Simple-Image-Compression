@@ -114,9 +114,10 @@ class KMeans
         for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
         {
             minimum_cluster = labels[index_pixel];
+
             for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
             {
-                image[index_pixel * NUMOFCHANELS + index_channel] = (u_char)round(minimum_cluster * NUMOFCHANELS + index_channel);
+                image[index_pixel * NUMOFCHANELS + index_channel] = (u_char)round(centers[minimum_cluster * NUMOFCHANELS + index_channel]);
             }
         }
         
