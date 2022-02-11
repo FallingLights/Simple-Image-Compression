@@ -10,12 +10,14 @@
  * c++ -o serial -I include/ serial.cpp
  */
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <string>
+#include <random>
 #include <vector>
+
 #include <tclap/CmdLine.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "FreeImage.h"
 
 #define errorexit(errcode, errstr) \
     fprintf(stderr, "%s: &d\n", errstr, errcode); \
@@ -45,6 +47,112 @@
         std::vector <std::string> tokens;
 };*/
 
+class KMeans
+{
+  private:
+    unsigned char *image;
+    int clusters;
+    int width;
+	int height;
+	int pitch;
+    int numberOfPixels;
+    int *labels;
+    double *centers;
+    double *distances;
+
+  public:
+    // Intialise cluster centres as random pixels from the image
+    KMeans(unsigned char *image, int width, int height, int pitch, int clusters, int iterations)
+    {
+        this->image = image;
+        this->width = width;
+        this->height = height;
+        this->pitch = pitch;
+        this->clusters = clusters;
+
+        this->numberOfPixels = width * height;
+
+        this->labels = new int[numberOfPixels];
+        this->centers = new double[4 * clusters];
+        this->distances = new double[numberOfPixels];
+
+        initialize_clusters();
+
+        for (size_t i = 0; i < iterations; i++)
+        {
+            label_pixels();
+            computeCentroids();
+        }
+        
+    }
+
+  private:
+    void initialize_clusters(){
+        for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
+        {
+            int rnd = random(0, numberOfPixels);
+            for (size_t index_channel = 0; index_channel < 4; index_channel++)
+            {
+                //TODO: Preveri če je pravilni vsrtni ali je RGBA ali BGRA  pa če rabimo tale A
+                centers[index_cluster * 4 + index_channel] = image[rnd * 4 + index_channel];
+            }
+        }
+    }
+    void label_pixels(){
+        double minimum_distance;
+        for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
+        {
+            int centroidLabel = 0;
+            minimum_distance = std::numeric_limits<double>::max(); //nastavimo na MAX
+            for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
+            {
+                double distance = euclidian_distance(centers[index_cluster * 4 + 0], centers[index_cluster * 4 + 1], centers[index_cluster * 4 + 2], 
+                                                        image[index_pixel * 4 + 0], image[index_pixel * 4 + 1], image[index_pixel * 4 + 2]); // ! Možno da je napaka, preveč računanja zame
+                
+                if (distance < minimum_distance)
+                {
+                    minimum_distance = distance;
+                    centroidLabel = index_cluster;
+                    labels[index_pixel] = centroidLabel;
+                }
+                
+            }
+            distances[index_pixel] = minimum_distance;
+        }
+        //changes
+    }
+    void computeCentroids()
+    {
+        for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
+        {
+
+        }
+    }
+    /**
+     * @brief Calculate euclidian distance
+     * 
+     * @param dim Number of Dimensions
+     * @param p1 vector p1
+     * @param p2 vector p2
+     * @return double Distance
+     */
+    double euclidian_distance(int x1, int y1, int z1, int x2, int y2, int z2)
+    {
+        return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1- z2, 2));
+    }
+
+    static int random(int min, int max) //range : [min, max]
+    {
+        static bool first = true;
+        if (first) 
+        {  
+            srand(time(NULL)); //seeding for the first time only!
+            first = false;
+        }
+        return min + rand() % (( max + 1 ) - min);
+    }                         
+};
+
 int main(int argc, char const *argv[])
 {
 	try {  
@@ -67,13 +175,32 @@ int main(int argc, char const *argv[])
 
 	// Do what you intend. 
 
-    //Loading input image
-	int width, height, channels;
-    unsigned char *idata;
-    if((idata = stbi_load(inputPath.c_str(), &width, &height, &channels, 0)) == NULL){
-        printf("Error in loading the image\n");
-        exit (99);
-    }
+    //Load image from file
+	FIBITMAP *imageBitmap = FreeImage_Load(FIF_BMP, inputPath.c_str(), 0);
+	//Convert it to a 32-bit image
+    FIBITMAP *imageBitmap32 = FreeImage_ConvertTo32Bits(imageBitmap);
+	
+    //Get image dimensions
+    int width = FreeImage_GetWidth(imageBitmap32);
+	int height = FreeImage_GetHeight(imageBitmap32);
+	int pitch = FreeImage_GetPitch(imageBitmap32);
+    // calculate the number of bytes per pixel
+    unsigned bytespp = FreeImage_GetLine(imageBitmap32) / FreeImage_GetWidth(imageBitmap32);
+    // calculate the number of samples per pixel
+    unsigned samples = bytespp / sizeof(BYTE);
+
+    //Allcoate space for image
+    unsigned char *image = (unsigned char *)malloc(height * pitch * sizeof(unsigned char));
+
+    //Kopiraj vsebino v alociran prostor
+	FreeImage_ConvertToRawBits(image, imageBitmap, pitch, 32, FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, TRUE);
+
+    //Slik ne potrebujemo več zato jih unloudamo
+	FreeImage_Unload(imageBitmap32);
+	FreeImage_Unload(imageBitmap);
+
+    KMeans kmeans(image, width, height, pitch, numberOfClusters);
+
 
 
 
