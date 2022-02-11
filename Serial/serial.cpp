@@ -8,6 +8,7 @@
  * @copyright Copyright (c) 2022
  * 
  * @compile c++ -o serial -I include/ serial.cpp
+ *  c++ serial.cpp -I include/ -Wl,-rpath,./ -L./ -l:"libfreeimage.so.3" -o serial
  */
 #include <algorithm>
 #include <chrono>
@@ -15,6 +16,7 @@
 #include <string>
 #include <random>
 #include <vector>
+#include <sys/stat.h>
 
 #include <tclap/CmdLine.h>
 #include "FreeImage.h"
@@ -23,6 +25,7 @@
     fprintf(stderr, "%s: &d\n", errstr, errcode); \
     exit(1);
 
+#define NUMOFCHANELS 3
 /*class InputParser{
     // https://stackoverflow.com/questions/865668/parsing-command-line-arguments-in-c?page=1&tab=votes#tab-top
     public:
@@ -47,6 +50,13 @@
         std::vector <std::string> tokens;
 };*/
 
+long GetFileSize(std::string filename)
+{//https://stackoverflow.com/questions/5840148/how-can-i-get-a-files-size-in-c
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
 class KMeans
 {
   private:
@@ -60,6 +70,7 @@ class KMeans
     double *centers;
     double *distances;
     int iterations;
+    bool changes = false;
 
   public:
     // Intialise cluster centres as random pixels from the image
@@ -75,7 +86,7 @@ class KMeans
         this->numberOfPixels = width * height;
 
         this->labels = new int[numberOfPixels];
-        this->centers = new double[4 * clusters];
+        this->centers = new double[NUMOFCHANELS * clusters];
         this->distances = new double[numberOfPixels];
 
         initialize_clusters();
@@ -83,12 +94,36 @@ class KMeans
     }
 
     void train()
-    {
+    {   
+        std::cout << "Training...\n";
         for (size_t i = 0; i < iterations; i++)
         {
             label_pixels();
+            /*if (changes == false)
+            {
+                break;
+            }*/
             computeCentroids();
+            std::cout << "Train step " << i << " done" << std::endl;
         }
+    }
+
+    void out(std::string outputPath)
+    {   
+        int minimum_cluster;
+        for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
+        {
+            minimum_cluster = labels[index_pixel];
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+            {
+                image[index_pixel * NUMOFCHANELS + index_channel] = (u_char)round(minimum_cluster * NUMOFCHANELS + index_channel);
+            }
+        }
+        
+        //shranimo sliko
+        FIBITMAP *dst = FreeImage_ConvertFromRawBits(image, width, height, pitch,
+            32, FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, TRUE);
+        FreeImage_Save(FIF_PNG, dst, outputPath.c_str(), 0);
     }
 
   private:
@@ -96,35 +131,43 @@ class KMeans
         for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
         {
             int rnd = random(0, numberOfPixels);
-            for (size_t index_channel = 0; index_channel < 4; index_channel++)
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
             {
                 //TODO: Preveri če je pravilni vsrtni ali je RGBA ali BGRA  pa če rabimo tale A
-                centers[index_cluster * 4 + index_channel] = image[rnd * 4 + index_channel];
+                centers[index_cluster * NUMOFCHANELS + index_channel] = image[rnd * NUMOFCHANELS + index_channel];
             }
         }
     }
     void label_pixels(){
         double minimum_distance;
+        bool changesTemp = false;
         for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
         {
             int centroidLabel = 0;
             minimum_distance = std::numeric_limits<double>::max(); //nastavimo na MAX
             for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
             {
-                double distance = euclidian_distance(centers[index_cluster * 4 + 0], centers[index_cluster * 4 + 1], centers[index_cluster * 4 + 2], 
-                                                        image[index_pixel * 4 + 0], image[index_pixel * 4 + 1], image[index_pixel * 4 + 2]); // ! Možno da je napaka, preveč računanja zame
+                double distance = euclidian_distance(centers[index_cluster * NUMOFCHANELS + 0], centers[index_cluster * NUMOFCHANELS + 1], centers[index_cluster * NUMOFCHANELS + 2], 
+                                                        image[index_pixel * NUMOFCHANELS + 0], image[index_pixel * NUMOFCHANELS + 1], image[index_pixel * NUMOFCHANELS + 2]); // ! Možno da je napaka, preveč računanja zame
                 
                 if (distance < minimum_distance)
                 {
                     minimum_distance = distance;
                     centroidLabel = index_cluster;
-                    labels[index_pixel] = centroidLabel;
+                    
                 }
                 
             }
+            if (labels[index_pixel] != centroidLabel)
+            {
+                labels[index_pixel] = centroidLabel;
+                changesTemp = true;
+            }
+            
             distances[index_pixel] = minimum_distance;
         }
         //changes
+        changes = changesTemp;
     }
     void computeCentroids()
     { //Compute mean
@@ -134,18 +177,18 @@ class KMeans
         for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
         {
             cluster_counter[index_cluster] = 0;
-            for (size_t index_channel = 0; index_channel < 4; index_channel++)
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
             {
-                centers[index_cluster * 4 + index_channel] = 0;
+                centers[index_cluster * NUMOFCHANELS + index_channel] = 0;
             }  
         }
 
         for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
         {
             minimum_clusters = labels[index_pixel];
-            for (size_t index_channel = 0; index_channel < 4; index_channel++)
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
             {
-                centers[minimum_clusters * 4 + index_channel] = image[index_pixel * 4 + index_channel];
+                centers[minimum_clusters * NUMOFCHANELS + index_channel] = image[index_pixel * NUMOFCHANELS + index_channel];
             }
             cluster_counter[minimum_clusters]++;
         }
@@ -154,9 +197,9 @@ class KMeans
         {
             if (cluster_counter[index_cluster] > 0)
             {
-                for (size_t index_channel = 0; index_channel < 4; index_channel++)
+                for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
                 {
-                    centers[index_cluster * 4 * index_channel] = centers[index_cluster * 4 * index_channel] / cluster_counter[index_cluster];
+                    centers[index_cluster * NUMOFCHANELS * index_channel] = centers[index_cluster * NUMOFCHANELS * index_channel] / cluster_counter[index_cluster];
                 }
             }else{ // Če je cluster empty
                 int max_distance = 0;
@@ -170,9 +213,9 @@ class KMeans
                     }
                 }
                 
-                for (size_t index_channel = 0; index_channel < 4; index_channel++)
+                for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
                 {
-                    centers[index_cluster * 4 * index_channel] = image[furthest_pixel * 4 * index_channel];
+                    centers[index_cluster * NUMOFCHANELS * index_channel] = image[furthest_pixel * NUMOFCHANELS * index_channel];
                 }
                 
                 distances[furthest_pixel] = 0;
@@ -231,10 +274,19 @@ int main(int argc, char const *argv[])
     int numberOfClusters = clutstersArg.getValue();
     int iterations = iterationsArg.getValue();
 
+    std::cout << inputPath << std::endl;
+    std::cout << outputPath << std::endl;
+    std::cout << numberOfClusters << std::endl;
+    std::cout << iterations << std::endl;
+
 	// Do what you intend. 
 
     //Load image from file
-	FIBITMAP *imageBitmap = FreeImage_Load(FIF_BMP, inputPath.c_str(), 0);
+	FIBITMAP *imageBitmap = FreeImage_Load(FIF_PNG, inputPath.c_str(), 0);
+    if(imageBitmap == NULL){
+        printf("Error loading Image\n");
+        return(99);
+    }
 	//Convert it to a 32-bit image
     FIBITMAP *imageBitmap32 = FreeImage_ConvertTo32Bits(imageBitmap);
 	
@@ -259,11 +311,7 @@ int main(int argc, char const *argv[])
 
     KMeans kmeans(image, width, height, pitch, numberOfClusters, iterations);
     kmeans.train();
-
-    //shranimo sliko
-	FIBITMAP *dst = FreeImage_ConvertFromRawBits(image, width, height, pitch,
-		32, FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, TRUE);
-	FreeImage_Save(FIF_PNG, dst, outputPath.c_str(), 0);
+    kmeans.out(outputPath);
 
 	} catch (TCLAP::ArgException &e)  // catch exceptions
 	{ std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl; }
