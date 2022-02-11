@@ -122,7 +122,7 @@ class KMeans
         //changes
     }
     void computeCentroids()
-    {
+    { //Compute mean
         for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
         {
 
