@@ -7,7 +7,7 @@
  * 
  * @copyright Copyright (c) 2022
  * 
- * c++ -o serial -I include/ serial.cpp
+ * @compile c++ -o serial -I include/ serial.cpp
  */
 #include <algorithm>
 #include <chrono>
@@ -59,6 +59,7 @@ class KMeans
     int *labels;
     double *centers;
     double *distances;
+    int iterations;
 
   public:
     // Intialise cluster centres as random pixels from the image
@@ -69,6 +70,7 @@ class KMeans
         this->height = height;
         this->pitch = pitch;
         this->clusters = clusters;
+        this->iterations = iterations;
 
         this->numberOfPixels = width * height;
 
@@ -77,13 +79,16 @@ class KMeans
         this->distances = new double[numberOfPixels];
 
         initialize_clusters();
+        
+    }
 
+    void train()
+    {
         for (size_t i = 0; i < iterations; i++)
         {
             label_pixels();
             computeCentroids();
         }
-        
     }
 
   private:
@@ -123,18 +128,70 @@ class KMeans
     }
     void computeCentroids()
     { //Compute mean
+        int *cluster_counter = new int[clusters];
+        int minimum_clusters;
+        //Reset counter and centers
         for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
         {
-
+            cluster_counter[index_cluster] = 0;
+            for (size_t index_channel = 0; index_channel < 4; index_channel++)
+            {
+                centers[index_cluster * 4 + index_channel] = 0;
+            }  
         }
+
+        for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
+        {
+            minimum_clusters = labels[index_pixel];
+            for (size_t index_channel = 0; index_channel < 4; index_channel++)
+            {
+                centers[minimum_clusters * 4 + index_channel] = image[index_pixel * 4 + index_channel];
+            }
+            cluster_counter[minimum_clusters]++;
+        }
+
+        for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
+        {
+            if (cluster_counter[index_cluster] > 0)
+            {
+                for (size_t index_channel = 0; index_channel < 4; index_channel++)
+                {
+                    centers[index_cluster * 4 * index_channel] = centers[index_cluster * 4 * index_channel] / cluster_counter[index_cluster];
+                }
+            }else{ // Če je cluster empty
+                int max_distance = 0;
+                int furthest_pixel;
+                for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
+                {
+                    if (distances[index_pixel] > max_distance)
+                    {
+                        max_distance = distances[index_pixel];
+                        furthest_pixel = index_pixel;
+                    }
+                }
+                
+                for (size_t index_channel = 0; index_channel < 4; index_channel++)
+                {
+                    centers[index_cluster * 4 * index_channel] = image[furthest_pixel * 4 * index_channel];
+                }
+                
+                distances[furthest_pixel] = 0;
+            }
+            
+        }
+        delete(cluster_counter);
     }
+
     /**
-     * @brief Calculate euclidian distance
+     * @brief Calculate Euclidian Distance
      * 
-     * @param dim Number of Dimensions
-     * @param p1 vector p1
-     * @param p2 vector p2
-     * @return double Distance
+     * @param x1
+     * @param y1 
+     * @param z1 
+     * @param x2 
+     * @param y2 
+     * @param z2 
+     * @return double
      */
     double euclidian_distance(int x1, int y1, int z1, int x2, int y2, int z2)
     {
@@ -164,7 +221,7 @@ int main(int argc, char const *argv[])
 	TCLAP::ValueArg<std::string> inputArg("i","input","Path to input photo",true,"image.png","string", cmd);
     TCLAP::ValueArg<std::string> outputArg("o","output","Path to output photo",true,"image_compressed.png","string", cmd);
     TCLAP::ValueArg<int> clutstersArg("k","clusters","Number of Clusters",false, 4,"int", cmd);
-
+    TCLAP::ValueArg<int> iterationsArg("t","iterations","Number of iterations",false, 150,"int", cmd);
 	// Parse the argv array.
 	cmd.parse( argc, argv );
 
@@ -172,6 +229,7 @@ int main(int argc, char const *argv[])
 	std::string inputPath = inputArg.getValue();
     std::string outputPath = outputArg.getValue();
     int numberOfClusters = clutstersArg.getValue();
+    int iterations = iterationsArg.getValue();
 
 	// Do what you intend. 
 
@@ -199,10 +257,13 @@ int main(int argc, char const *argv[])
 	FreeImage_Unload(imageBitmap32);
 	FreeImage_Unload(imageBitmap);
 
-    KMeans kmeans(image, width, height, pitch, numberOfClusters);
+    KMeans kmeans(image, width, height, pitch, numberOfClusters, iterations);
+    kmeans.train();
 
-
-
+    //shranimo sliko
+	FIBITMAP *dst = FreeImage_ConvertFromRawBits(image, width, height, pitch,
+		32, FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, TRUE);
+	FreeImage_Save(FIF_PNG, dst, outputPath.c_str(), 0);
 
 	} catch (TCLAP::ArgException &e)  // catch exceptions
 	{ std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl; }
