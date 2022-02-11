@@ -25,7 +25,7 @@
     fprintf(stderr, "%s: &d\n", errstr, errcode); \
     exit(1);
 
-#define NUMOFCHANELS 3
+#define NUMOFCHANELS 4
 /*class InputParser{
     // https://stackoverflow.com/questions/865668/parsing-command-line-arguments-in-c?page=1&tab=votes#tab-top
     public:
@@ -57,6 +57,19 @@ long GetFileSize(std::string filename)
     return rc == 0 ? stat_buf.st_size : -1;
 }
 
+class Pixel
+{
+  public:
+    u_char b, g, r;
+
+    Pixel(u_char b, u_char g, u_char r)
+    {
+        this->b = b;
+        this->g = g;
+        this->r = r;
+    }
+};
+
 class KMeans
 {
   private:
@@ -71,6 +84,7 @@ class KMeans
     double *distances;
     int iterations;
     bool changes = false;
+    bool first;
 
   public:
     // Intialise cluster centres as random pixels from the image
@@ -89,6 +103,7 @@ class KMeans
         this->centers = new double[NUMOFCHANELS * clusters];
         this->distances = new double[numberOfPixels];
 
+        this->first = true;
         initialize_clusters();
         
     }
@@ -115,9 +130,10 @@ class KMeans
         {
             minimum_cluster = labels[index_pixel];
 
-            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS-1; index_channel++)
             {
                 image[index_pixel * NUMOFCHANELS + index_channel] = (u_char)round(centers[minimum_cluster * NUMOFCHANELS + index_channel]);
+                image[index_pixel * NUMOFCHANELS + 3] = 255;
             }
         }
         
@@ -142,23 +158,24 @@ class KMeans
     void label_pixels(){
         double minimum_distance;
         bool changesTemp = false;
+
         for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
         {
             int centroidLabel = 0;
             minimum_distance = std::numeric_limits<double>::max(); //nastavimo na MAX
             for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
             {
-                double distance = euclidian_distance(centers[index_cluster * NUMOFCHANELS + 0], centers[index_cluster * NUMOFCHANELS + 1], centers[index_cluster * NUMOFCHANELS + 2], 
-                                                        image[index_pixel * NUMOFCHANELS + 0], image[index_pixel * NUMOFCHANELS + 1], image[index_pixel * NUMOFCHANELS + 2]); // ! Možno da je napaka, preveč računanja zame
+                double distance = euclidian_distance(centers[index_cluster * NUMOFCHANELS], centers[index_cluster * NUMOFCHANELS + 1], centers[index_cluster * NUMOFCHANELS + 2], 
+                                                        image[index_pixel * NUMOFCHANELS], image[index_pixel * NUMOFCHANELS + 1], image[index_pixel * NUMOFCHANELS + 2]); // ! Možno da je napaka, preveč računanja zame
                 
                 if (distance < minimum_distance)
                 {
                     minimum_distance = distance;
                     centroidLabel = index_cluster;
-                    
                 }
                 
             }
+
             if (labels[index_pixel] != centroidLabel)
             {
                 labels[index_pixel] = centroidLabel;
@@ -170,6 +187,7 @@ class KMeans
         //changes
         changes = changesTemp;
     }
+
     void computeCentroids()
     { //Compute mean
         int *cluster_counter = new int[clusters];
@@ -242,9 +260,8 @@ class KMeans
         return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1- z2, 2));
     }
 
-    static int random(int min, int max) //range : [min, max]
+    int random(int min, int max) //range : [min, max]
     {
-        static bool first = true;
         if (first) 
         {  
             srand(time(NULL)); //seeding for the first time only!
