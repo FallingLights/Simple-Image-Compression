@@ -1,12 +1,12 @@
 /**
- * @file serial.c
+ * @file OpenMP.c
  * @author FallingLights (fallinglights@protonmail.com)
  * @brief
  * @version 0.1
  * @date 2022-02-12
  *
  * @copyright https://github.com/mirou23/image-segmentation/
- * @compile gcc -Wall -o serial.out serial.c -lm
+ * @compile gcc -Wall -o OpenMP.out OpenMP.c -lm
  */
 #include <errno.h>
 #include <float.h>
