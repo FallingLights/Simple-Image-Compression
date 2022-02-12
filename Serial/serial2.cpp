@@ -1,7 +1,7 @@
 /**
  * @file serial.cpp
  * @author AG
- * @brief
+ * @brief https://www.youtube.com/watch?v=tas0O586t80
  * @version 0.1
  * @date 2022-02-10
  *
@@ -19,6 +19,10 @@
 #include <sys/stat.h>
 #include <vector>
 
+#include <bits/stdc++.h>
+#include <iomanip>
+#include <math.h>
+
 #include <tclap/CmdLine.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -29,6 +33,8 @@
     fprintf(stderr, "%s: &d\n", errstr, errcode); \
     exit(1);
 
+#define sqr(x) ((x)*(x))
+
 long GetFileSize(std::string filename)
 { // https://stackoverflow.com/questions/5840148/how-can-i-get-a-files-size-in-c
     struct stat stat_buf;
@@ -36,188 +42,245 @@ long GetFileSize(std::string filename)
     return rc == 0 ? stat_buf.st_size : -1;
 }
 
+// Loads as RGBA... even if file is only RGB
+// Feel free to adjust this if you so please, by changing the 4 to a 0.
+bool load_image(std::vector<unsigned char>& image, const std::string& filename, int& x, int&y)
+{ // https://www.cplusplus.com/forum/beginner/267364/
+    int n;
+    unsigned char* data = stbi_load(filename.c_str(), &x, &y, &n, 4);
+    if (data != nullptr)
+    {
+        image = std::vector<unsigned char>(data, data + x * y * 4);
+    }
+    stbi_image_free(data);
+    return (data != nullptr);
+}
+
+template <class T>
+class MyArray2D
+{
+    std::vector<T> data;
+    size_t sizeX, sizeY;
+public:
+
+const T& at(int x, int y) const { return data.at(y + x * sizeY); }
+
+T& at(int x, int y) { return data.at(y + x * sizeY); }
+
+// wrap other methods you need of std::vector here
+};
+
 class Pixel
 {
 public:
     u_char b, g, r;
-
-    Pixel(u_char b, u_char g, u_char r)
+    Pixel(u_char blue, u_char green, u_char red)
     {
-        this->b = b;
-        this->g = g;
-        this->r = r;
+        this->b = blue;
+        this->g = green;
+        this->r = red;
     }
 };
 
+std::default_random_engine dre(std::chrono::steady_clock::now().time_since_epoch().count()); // provide seed
 class KMeans
 {
 private:
     unsigned char *image;
     int width;
     int height;
-    int n_ch;
-    int n_clus;
+    int n_channels;
+    int n_clusters;
     int iterations;
 
     int n_px;
-    int *labels;
-    double *centers;
-    double *distances;
-    int changes;
-    bool first;
-
+    std::vector<std::vector<int>> labels; // https://stackoverflow.com/questions/9694838/how-to-implement-2d-vector-array
+    std::vector<Pixel> clusterCentres;
 public:
-    // Intialise cluster centres as random pixels from the image
     KMeans(unsigned char *image, int width, int height, int n_ch, int n_clus, int iterations)
     {
         this->image = image;
+
         this->width = width;
         this->height = height;
-        this->n_ch = n_ch;
-        this->n_clus = n_clus;
+        this->n_channels = n_ch;
+
+        this->n_clusters = n_clus;
         this->iterations = iterations;
 
         this->n_px = width * height;
+        this->labels.resize(height, std::vector<int>(width, 0));
 
-        this->labels = new int[n_px];
-        this->centers = new double[n_ch * n_clus];
-        this->distances = new double[n_px];
+        for (size_t i = 0; i < n_clusters; i++)
+        {
+            int rndRow = my_random(height - 1);
+            int rndCol = my_random(width - 1);
 
-        this->first = true;
-        initialize_n_clus();
-        train();
+            //unsigned bytePerPixel = n_channels;
+            //unsigned char* pixelOffset = image + (rndRow + height * rndCol) * bytePerPixel; // ? Ali je rndRow zamenjam z rndCol (x,y)
+            //unsigned char* pixelOffset = image + (4 * (rndCol * width + rndRow)); //(y , x) y = rndCol | pa 4 zamenji z bytePerPixel
+            unsigned char* pixelOffset = get_pixel(rndRow, rndCol);
+            unsigned char r = pixelOffset[0];
+            unsigned char g = pixelOffset[1];
+            unsigned char b = pixelOffset[2];
+            printf("Row : %d, Col : %d, Red : %d, Green : %d, Blue: %d, rgb(%d, %d, %d)\n", rndRow, rndCol ,r, g, b, r,g,b);
+            //unsigned char a = n_channels >= 4 ? pixelOffset[3] : 0xff;
+            clusterCentres.push_back(Pixel(b, g, r));
+
+            Pixel p = clusterCentres.at(i);
+            printf("Cluster : R : %d G : %d : B : %d\n", p.r, p.g, p.b);
+        }
+        label_pixels();
     }
 
     void train()
     {
         std::cout << "Training...\n";
         for (size_t i = 0; i < iterations; i++) {
-            label_pixels();
-            if (!changes) {
-                break;
-            }
             computeCentroids();
+            label_pixels();
             std::cout << "Train step " << i << " done" << std::endl;
         }
     }
 
     void out(std::string outputPath)
     {
-        int minimum_cluster;
-        int px, ch;
-        for (px = 0; px < n_px; px++) {
-            minimum_cluster = labels[px];
-
-            for (ch = 0; ch < n_ch; ch++) {
-                image[px * n_ch + ch] = (u_char)round(centers[minimum_cluster * n_ch + ch]);
-                // image[px * n_ch + 3] = 255;
+        for (size_t r = 0; r < height; r++)
+        {
+            for (size_t c = 0; c < width; c++)
+            {
+                unsigned bytePerPixel = n_channels;
+                Pixel p = clusterCentres.at(labels[r][c]);
+                // ! Uprašanje če je to pravilno
+                //labels[r][c] = 99;
+                //printf("Out => Row : %d, Col : %d, Label : %d Red : %d, Green : %d, Blue: %d\n", r, c, labels[r][c], p.r, p.g, p.b);
+                image[bytePerPixel * (r * width + c) + 0] = p.r; //Red n_channels * r * width + n_channels * c + 1
+                image[bytePerPixel * (r * width + c) + 1] = p.g; // Green
+                image[bytePerPixel * (r * width + c) + 2] = p.b; // Blue
             }
+            
         }
-
+        
+        std::string ext;
+        int dot = outputPath.find_last_of('.');
+        ext = outputPath.substr(dot);
         std::cout << "Writing Image\n";
-        stbi_write_jpg(outputPath.c_str(), width, height, n_ch, image, 100);
+        if (ext.empty()) {
+            fprintf(stderr, "ERROR SAVING IMAGE: << Unspecified format >> \n\n");
+            return;
+        }
+        
+        if (ext.compare(".jpeg") == 0 || ext.compare(".jpg") == 0) {
+            stbi_write_jpg(outputPath.c_str(), width, height, n_channels, image, 100);
+        } else if (ext.compare(".png") == 0) {
+            stbi_write_png(outputPath.c_str(), width, height, n_channels, image, width * n_channels);
+        } else if (ext.compare(".bmp") == 0) {
+            stbi_write_bmp(outputPath.c_str(), width, height, n_channels, image);
+        } else if (ext.compare(".tga") == 0) {
+            stbi_write_tga(outputPath.c_str(), width, height, n_channels, image);
+        } else {
+            fprintf(stderr, "ERROR SAVING IMAGE: << Unsupported format >> \n\n");
+        }
+        //stbi_write_jpg(outputPath.c_str(), width, height, n_channels, image, 100);
         clean();
     }
+    
     void clean()
     {
-        delete (labels);
-        delete (centers);
-        delete (distances);
-        delete (image);
+        for (size_t r = 0; r < height; r++)
+        {
+            labels[r].clear();
+        }
+        labels.clear();
+        clusterCentres.clear();
+        //delete (image);
     }
 
 private:
-    void initialize_n_clus()
+    unsigned char* get_pixel(int x, int y){ // ! tuakj je lahko napaka
+        unsigned bytePerPixel = n_channels;
+        //unsigned char* pixelOffset = image + (x + height * y) * bytePerPixel; // ? Ali je rndRow zamenjam z rndCol (x,y)
+        unsigned char* pixelOffset = image + (bytePerPixel * (x * width + y)); //(y , x) y = rndCol | pa 4 zamenji z bytePerPixel
+        return pixelOffset;
+    }
+
+    /* void initialize_n_clus()
     {
         int k, ch, rnd;
 
-        for (k = 0; k < n_clus; k++) {
+        for (k = 0; k < n_clusters; k++) {
             rnd = rand() % n_px;
 
-            for (ch = 0; ch < n_ch; ch++) {
-                centers[k * n_ch + ch] = image[rnd * n_ch + ch];
+            for (ch = 0; ch < n_channels; ch++) {
+                centers[k * n_channels + ch] = image[rnd * n_channels + ch];
             }
         }
-    }
+    } */
 
     void label_pixels()
     {
-        int px, ch, k;
-        int changesTemp = 0;
-        int centroidLabel = 0;
-        double distance, tmp, minimum_distance;
-
-        for (px = 0; px < n_px; px++) {
-            minimum_distance = std::numeric_limits<double>::max(); // nastavimo na MAX
-            for (k = 0; k < n_clus; k++) {
-                distance = 0;
-                for (ch = 0; ch < n_ch; ch++) {
-                    tmp = (double)(image[px * n_ch + ch] - centers[k * n_ch + ch]);
-                    distance += tmp * tmp;
-                }
-
-                if (distance < minimum_distance) {
-                    minimum_distance = distance;
-                    centroidLabel = k;
-                }
-            }
-
-            distances[px] = minimum_distance;
-
-            if (labels[px] != centroidLabel) {
-                labels[px] = centroidLabel;
-                changesTemp = 1;
-            }
-        }
-        // changes
-        changes = changesTemp;
-    }
-
-    void computeCentroids()
-    { // Compute mean
-        int *cluster_counter = new int[n_clus];
-        int centroidLabel;
-        int furthest_pixel;
-        int px, ch, k;
-        double max_distance;
-        // Reset counter and centers
-        for (k = 0; k < n_clus; k++) {
-            for (ch = 0; ch < n_ch; ch++) {
-                centers[k * n_ch + ch] = 0;
-            }
-            cluster_counter[k] = 0;
-        }
-
-        for (px = 0; px < n_px; px++) {
-            centroidLabel = labels[px];
-            for (ch = 0; ch < n_ch; ch++) {
-                centers[centroidLabel * n_ch + ch] += image[px * n_ch + ch];
-            }
-            cluster_counter[centroidLabel]++;
-        }
-
-        for (k = 0; k < n_clus; k++) {
-            if (cluster_counter[k]) {
-                for (ch = 0; ch < n_ch; ch++) {
-                    centers[k * n_ch * ch] /= cluster_counter[k];
-                }
-            } else { // Če je cluster empty
-                max_distance = 0;
-                for (px = 0; px < n_px; px++) {
-                    if (distances[px] > max_distance) {
-                        max_distance = distances[px];
-                        furthest_pixel = px;
+        for (size_t r = 0; r < height; r++)
+        {
+            for (size_t c = 0; c < width; c++)
+            { // ! TUKAJ NEKJE JE NAPAKA
+                int centroidLabel = 0;
+                u_char b, g, r;
+                float distance, min_distance;
+                u_char * rgb_pixel = get_pixel(r, c);
+                r = rgb_pixel[0];
+                g = rgb_pixel[1];
+                b = rgb_pixel[2];
+                Pixel test = Pixel(b, g, r);
+                //min_distance = euclidian_distance(clusterCentres[0].r, clusterCentres[0].g, clusterCentres[0].b, r, g, b);
+                min_distance= std::numeric_limits<float>::max();
+                //printf("Row : %d Col : %d Dist 0 : %f\n", r,c,min_distance);
+                for (size_t i = 0; i < n_clusters; i++)
+                {
+                    distance = 0;
+                    //distance = euclidian_distance(clusterCentres[i].r, clusterCentres[i].g, clusterCentres[i].b, r, g, b);
+                    distance = distance3d((float)clusterCentres[i].r, (float)clusterCentres[i].g, (float)clusterCentres[i].b, (float)r, (float)g, (float)b);
+                    //printf("Row : %d Col : %d Dist %d : %f\n", r,c, i, min_distance);
+                    if (min_distance > distance)
+                    {
+                        //std::cout << "New minimum\n";
+                        min_distance = distance;
+                        centroidLabel = i;
+                        labels[r][c] = centroidLabel;
+                        //printf("row : %d, col : %d, label : %d, writen %d\n", r, c, centroidLabel, labels[r][c]);
                     }
                 }
-
-                for (ch = 0; ch < n_ch; ch++) {
-                    centers[k * n_ch * ch] = image[furthest_pixel * n_ch * ch];
-                }
-
-                distances[furthest_pixel] = 0;
+                
             }
+            
         }
-        delete (cluster_counter);
+        
+    }
+   private:
+    void computeCentroids()
+    { // Compute mean
+        for (int i = 0; i < n_clusters; i++)
+        {
+            double mean_b = 0.0, mean_g = 0.0, mean_r = 0.0;
+            int n = 0;
+            for (int r = 0; r < height; r++)
+            {
+                for (int c = 0; c < width; c++)
+                {
+                    if (labels[r][c] == i)
+                    {
+                        u_char * rgb_pixel = get_pixel(r, c);
+                        mean_r = rgb_pixel[0];
+                        mean_g = rgb_pixel[1];
+                        mean_b = rgb_pixel[2];
+                        n++;
+                    }
+                }
+            }
+            mean_b /= n;
+            mean_g /= n;
+            mean_r /= n;
+            clusterCentres.at(i) = Pixel(mean_b, mean_g, mean_r);
+        }
     }
 
     double euclidian_distance(int x1, int y1, int z1, int x2, int y2, int z2)
@@ -225,16 +288,30 @@ private:
         return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2));
     }
 
-    int my_random(int min, int max) // range : [min, max]
+    float distance3d(float x1, float y1, float z1, float x2, float y2, float z2)
+    { // https://www.geeksforgeeks.org/program-to-calculate-distance-between-two-points-in-3-d/
+        float d = sqrt(pow(x2 - x1, 2) +
+                    pow(y2 - y1, 2) +
+                    pow(z2 - z1, 2) * 1.0);
+        return d;
+    }
+
+    /* int randomy(int min, int max) // range : [min, max]
     {
         if (first) {
             srand(time(NULL)); // seeding for the first time only!
             first = false;
         }
         return min + rand() % ((max + 1) - min);
+    } */
+    
+    static int my_random(int lim)
+    {//https://stackify.dev/391611-c-generating-random-numbers-inside-loop
+        std::uniform_int_distribution<int> uid{0, lim};                                              // help dre to generate nos from 0 to lim (lim included);
+        return uid(dre);                                                                             // pass dre as an argument to uid to generate the random no
     }
 
-    long random_at_most(long max)
+    /* long random_at_most(long max)
     {
         unsigned long
             // max <= RAND_MAX < ULONG_MAX, so this is okay.
@@ -252,7 +329,7 @@ private:
 
         // Truncated division is intentional
         return x / bin_size;
-    }
+    } */
 };
 
 int main(int argc, char const *argv[])
@@ -289,15 +366,17 @@ int main(int argc, char const *argv[])
         int height;
         int n_ch;
         image = stbi_load(inputPath.c_str(), &width, &height, &n_ch, 0);
+        std::cout <<"Number of Channels: " <<n_ch << std::endl;
         if (image == NULL) {
             fprintf(stderr, "ERROR LOADING IMAGE: << Invalid file name or format >> \n");
             exit(EXIT_FAILURE);
         }
-
+        printf("Image loaded => Number of channels : %d, width : %d, height :%d\n", n_ch, width, height);
         KMeans kmeans(image, width, height, n_ch, numberOfn_clus, iterations);
-        // kmeans.train();
+        //kmeans.train();
         kmeans.out(outputPath);
 
+        stbi_image_free(image);
     } catch (TCLAP::ArgException &e) // catch exceptions
     {
         std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
