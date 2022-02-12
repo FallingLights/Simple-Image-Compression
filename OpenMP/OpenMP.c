@@ -4,9 +4,10 @@
  * @brief
  * @version 0.1
  * @date 2022-02-12
- *
- * @copyright https://github.com/mirou23/image-segmentation/
- * @compile gcc -Wall -o OpenMP.out OpenMP.c -lm
+ * 
+ * Uporabil sem schedule(runtime) moreš nastaviti $ export OMP_SCHEDULE=static
+ * @copyright
+ * @compile gcc -Wall -o serial.out serial.c -lm -fopenm -O2
  */
 #include <errno.h>
 #include <float.h>
@@ -15,17 +16,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/time.h>
+//#include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <omp.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "include/stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "include/stb_image_write.h"
 
+#define N_THREADS 2
+
 typedef unsigned char byte_t;
+
+int seed;
 
 byte_t *img_load(char *img_file, int *width, int *height, int *n_channels)
 {
@@ -70,11 +76,15 @@ void init_centers(byte_t *data, double *centers, int n_px, int n_ch, int n_clus)
 {
     int k, ch, rnd;
 
-    for (k = 0; k < n_clus; k++) {
-        rnd = rand() % n_px;
-
-        for (ch = 0; ch < n_ch; ch++) {
-            centers[k * n_ch + ch] = data[rnd * n_ch + ch];
+    #pragma omp parallel
+    {   
+        srand((int)(seed) ^ omp_get_thread_num());
+        #pragma omp for private(k, ch, rnd)
+        for (k = 0; k < n_clus; k++) {
+            rnd = rand() % n_px;
+            for (ch = 0; ch < n_ch; ch++) {
+                centers[k * n_ch + ch] = data[rnd * n_ch + ch];
+            }
         }
     }
 }
@@ -85,6 +95,7 @@ void label_pixels(byte_t *data, double *centers, int *labels, double *dists, int
     int min_k, tmp_changes = 0;
     double dist, min_dist, tmp;
 
+    #pragma omp parallel for schedule(guided, 100) private(px, ch, k, min_k, dist, min_dist, tmp)
     for (px = 0; px < n_px; px++) {
         min_dist = DBL_MAX;
 
@@ -184,7 +195,7 @@ void update_image(byte_t *data, double *centers, int *labels, int n_px, int n_ch
     }
 }
 
-void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters)
+void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters, int n_threads)
 {
     int n_px;
     int iter, max_iters;
@@ -193,16 +204,21 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     double *centers;
     double *dists;
 
+    omp_set_num_threads(n_threads);
+
     max_iters = *n_iters;
 
     n_px = width * height;
 
+    //Initialize Arrays
     labels = malloc(n_px * sizeof(int));
     centers = malloc(n_clus * n_channels * sizeof(double));
     dists = malloc(n_px * sizeof(double));
 
+    //Randomly set centers
     init_centers(data, centers, n_px, n_channels, n_clus);
 
+    //Training
     for (iter = 0; iter < max_iters; iter++) {
         label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
 
@@ -218,6 +234,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
 
     *n_iters = iter;
 
+    //Clean-Up
     free(centers);
     free(labels);
     free(dists);
@@ -232,12 +249,13 @@ void print_usage(char *pgr_name)
                   "   -i max_iters    : Max Number of iterations, must be bigger than 0. defualt is %d \n"
                   "   -o output_image : output image path, include extenstion. \n"
                   "   -s seed         : seed for random function. \n"
+                  "   -t threads      : number of threads for OpenMP\n"
                   "   -h              : print help. \n\n";
 
     fprintf(stderr, usage, pgr_name, 4, 150);
 }
 
-void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize)
+void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt)
 {
     char *details = "\nEXECUTION\n\n"
                     "  Image size              : %d x %d\n"
@@ -246,9 +264,10 @@ void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t 
                     "  Number of iterations    : %d\n"
                     "  Input Image Size        : %ld KB\n"
                     "  Output Image Size       : %ld KB\n"
-                    "  Size diffrance          : %ld KB\n\n";
+                    "  Size diffrance          : %ld KB\n"
+                    "  Runtime                 : %f\n\n";
 
-    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000);
+    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt);
 }
 
 off_t fsize(const char *filename)
@@ -269,16 +288,15 @@ int main(int argc, char **argv)
     int n_iters = 150;
     int n_clus = 4;
     char *out_path = "result.png";
-    int width, height, n_ch;
+    int width, height, n_ch, n_threads = N_THREADS;
     byte_t *data;
-    int seed = time(NULL);
-    double sse;
+    seed = time(NULL);
     char *in_path = NULL;
 
     // Parsing arguments and optional parameters
     // https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
     char optchar;
-    while ((optchar = getopt(argc, argv, "k:i:o:s:h")) != -1) {
+    while ((optchar = getopt(argc, argv, "k:i:o:s:t:h")) != -1) {
         switch (optchar) {
         case 'k':
             n_clus = strtol(optarg, NULL, 10);
@@ -291,6 +309,9 @@ int main(int argc, char **argv)
             break;
         case 's':
             seed = strtol(optarg, NULL, 10);
+            break;
+        case 't':
+            n_threads = strtol(optarg, NULL, 10);
             break;
         case 'h':
         default:
@@ -317,13 +338,15 @@ int main(int argc, char **argv)
     }
 
     //Seed rnd function
-    srand(seed);
+    //srand(seed);
 
     //Loading image
     data = img_load(in_path, &width, &height, &n_ch);
 
     // Executing k-means segmentation
-    kmeans(data, width, height, n_ch, n_clus, &n_iters);
+    double dt = omp_get_wtime();
+    kmeans(data, width, height, n_ch, n_clus, &n_iters, n_threads);
+    dt = omp_get_wtime() - dt;
 
     // Saving Image
     img_save(out_path, data, width, height, n_ch);
@@ -331,7 +354,7 @@ int main(int argc, char **argv)
     //Statistics
     off_t inSize = fsize(in_path);
     off_t outSize = fsize(out_path);
-    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize);
+    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt);
 
 
     //Cleaning up

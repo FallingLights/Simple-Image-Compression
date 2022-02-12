@@ -5,7 +5,7 @@
  * @version 0.1
  * @date 2022-02-12
  *
- * @copyright https://github.com/mirou23/image-segmentation/
+ * @copyright
  * @compile gcc -Wall -o serial.out serial.c -lm
  */
 #include <errno.h>
