@@ -17,6 +17,7 @@
 #include <random>
 #include <vector>
 #include <sys/stat.h>
+#include <limits>
 
 #include <tclap/CmdLine.h>
 #include "FreeImage.h"
@@ -78,7 +79,7 @@ class KMeans
     int width;
 	int height;
 	int pitch;
-    int numberOfPixels;
+    long numberOfPixels;
     int *labels;
     double *centers;
     double *distances;
@@ -121,6 +122,9 @@ class KMeans
             computeCentroids();
             std::cout << "Train step " << i << " done" << std::endl;
         }
+        delete(labels);
+        delete(centers);
+        delete(distances);
     }
 
     void out(std::string outputPath)
@@ -137,6 +141,7 @@ class KMeans
             }
         }
         
+        std::cout << "Saving Image" << std::endl;
         //shranimo sliko
         FIBITMAP *dst = FreeImage_ConvertFromRawBits(image, width, height, pitch,
             32, FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, TRUE);
@@ -147,17 +152,19 @@ class KMeans
     void initialize_clusters(){
         for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
         {
-            int rnd = random(0, numberOfPixels);
-            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+            int rnd = my_random(0, numberOfPixels);
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS-1; index_channel++)
             {
                 //TODO: Preveri če je pravilni vsrtni ali je RGBA ali BGRA  pa če rabimo tale A
                 centers[index_cluster * NUMOFCHANELS + index_channel] = image[rnd * NUMOFCHANELS + index_channel];
             }
         }
     }
+
     void label_pixels(){
         double minimum_distance;
         bool changesTemp = false;
+        int furthest_pixel;
 
         for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
         {
@@ -192,11 +199,12 @@ class KMeans
     { //Compute mean
         int *cluster_counter = new int[clusters];
         int minimum_clusters;
+        int furthest_pixel;
         //Reset counter and centers
         for (size_t index_cluster = 0; index_cluster < clusters; index_cluster++)
         {
             cluster_counter[index_cluster] = 0;
-            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS-1; index_channel++)
             {
                 centers[index_cluster * NUMOFCHANELS + index_channel] = 0;
             }  
@@ -205,9 +213,9 @@ class KMeans
         for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
         {
             minimum_clusters = labels[index_pixel];
-            for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+            for (size_t index_channel = 0; index_channel < NUMOFCHANELS-1; index_channel++)
             {
-                centers[minimum_clusters * NUMOFCHANELS + index_channel] = image[index_pixel * NUMOFCHANELS + index_channel];
+                centers[minimum_clusters * NUMOFCHANELS + index_channel] += image[index_pixel * NUMOFCHANELS + index_channel];
             }
             cluster_counter[minimum_clusters]++;
         }
@@ -216,13 +224,12 @@ class KMeans
         {
             if (cluster_counter[index_cluster] > 0)
             {
-                for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+                for (size_t index_channel = 0; index_channel < NUMOFCHANELS-1; index_channel++)
                 {
                     centers[index_cluster * NUMOFCHANELS * index_channel] = centers[index_cluster * NUMOFCHANELS * index_channel] / cluster_counter[index_cluster];
                 }
             }else{ // Če je cluster empty
                 int max_distance = 0;
-                int furthest_pixel;
                 for (size_t index_pixel = 0; index_pixel < numberOfPixels; index_pixel++)
                 {
                     if (distances[index_pixel] > max_distance)
@@ -232,7 +239,7 @@ class KMeans
                     }
                 }
                 
-                for (size_t index_channel = 0; index_channel < NUMOFCHANELS; index_channel++)
+                for (size_t index_channel = 0; index_channel < NUMOFCHANELS-1; index_channel++)
                 {
                     centers[index_cluster * NUMOFCHANELS * index_channel] = image[furthest_pixel * NUMOFCHANELS * index_channel];
                 }
@@ -260,7 +267,7 @@ class KMeans
         return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1- z2, 2));
     }
 
-    int random(int min, int max) //range : [min, max]
+    int my_random(int min, int max) //range : [min, max]
     {
         if (first) 
         {  
@@ -268,7 +275,26 @@ class KMeans
             first = false;
         }
         return min + rand() % (( max + 1 ) - min);
-    }                         
+    }
+
+    long random_at_most(long max) {
+        unsigned long
+            // max <= RAND_MAX < ULONG_MAX, so this is okay.
+            num_bins = (unsigned long) max + 1,
+            num_rand = (unsigned long) RAND_MAX + 1,
+            bin_size = num_rand / num_bins,
+            defect   = num_rand % num_bins;
+
+        long x;
+        do {
+        x = random();
+        }
+        // This is carefully written not to overflow
+        while (num_rand - defect <= (unsigned long)x);
+
+        // Truncated division is intentional
+        return x/bin_size;
+    }                        
 };
 
 int main(int argc, char const *argv[])
@@ -292,15 +318,15 @@ int main(int argc, char const *argv[])
     int numberOfClusters = clutstersArg.getValue();
     int iterations = iterationsArg.getValue();
 
-    std::cout << inputPath << std::endl;
-    std::cout << outputPath << std::endl;
-    std::cout << numberOfClusters << std::endl;
-    std::cout << iterations << std::endl;
+    //std::cout << inputPath << std::endl;
+    //std::cout << outputPath << std::endl;
+    //std::cout << numberOfClusters << std::endl;
+    //std::cout << iterations << std::endl;
 
 	// Do what you intend. 
 
     //Load image from file
-	FIBITMAP *imageBitmap = FreeImage_Load(FIF_PNG, inputPath.c_str(), 0);
+	FIBITMAP *imageBitmap = FreeImage_Load(FIF_JPEG, inputPath.c_str(), 0);
     if(imageBitmap == NULL){
         printf("Error loading Image\n");
         return(99);
