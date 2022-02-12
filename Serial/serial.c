@@ -203,6 +203,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
 
     init_centers(data, centers, n_px, n_channels, n_clus);
 
+    printf("Training...\n");
     for (iter = 0; iter < max_iters; iter++) {
         label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
 
