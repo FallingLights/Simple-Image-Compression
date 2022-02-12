@@ -20,7 +20,7 @@
 #include <limits>
 
 #include <tclap/CmdLine.h>
-#include "FreeImage.h"
+#include "include/FreeImage.h"
 
 #define errorexit(errcode, errstr) \
     fprintf(stderr, "%s: &d\n", errstr, errcode); \
