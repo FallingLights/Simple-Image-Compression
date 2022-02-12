@@ -109,7 +109,7 @@ public:
             minimum_cluster = labels[px];
 
             for (ch = 0; ch < n_ch; ch++) {
-                image[px * n_ch + ch] = (u_char)round(centers[minimum_cluster * n_ch + ch]);
+                image[n_ch * (px * + ch)] = (u_char)round(centers[minimum_cluster * n_ch + ch]);
                 // image[px * n_ch + 3] = 255;
             }
         }

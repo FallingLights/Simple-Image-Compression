@@ -56,6 +56,8 @@
         "thread": "cpp",
         "typeinfo": "cpp",
         "__nullptr": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "stb_image_write.h": "c",
+        "stb_image.h": "c"
     }
 }
