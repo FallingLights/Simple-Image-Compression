@@ -7,7 +7,7 @@
  * 
  * Uporabil sem schedule(runtime) moreš nastaviti $ export OMP_SCHEDULE=static
  * @copyright
- * @compile gcc -Wall -o serial.out serial.c -lm -fopenm -O2
+ * @compile gcc -Wall -o openmp.out OpenMP.c -lm -fopenmp -O2
  */
 #include <errno.h>
 #include <float.h>
@@ -101,26 +101,26 @@ void label_pixels(byte_t *data, double *centers, int *labels, double *dists, int
 
         for (k = 0; k < n_clus; k++) {
             dist = 0;
-
+            //Calculate disctance between pixel and center
             for (ch = 0; ch < n_ch; ch++) {
                 tmp = (double)(data[px * n_ch + ch] - centers[k * n_ch + ch]);
                 dist += tmp * tmp;
             }
-
+            //See if distance is MIN
             if (dist < min_dist) {
                 min_dist = dist;
                 min_k = k;
             }
         }
-
+        //save distance
         dists[px] = min_dist;
-
+        //Set label of pixel
         if (labels[px] != min_k) {
             labels[px] = min_k;
             tmp_changes = 1;
         }
     }
-
+    //Set changes flag, so we can pre quit if nothing changes
     *changes = tmp_changes;
 }
 
@@ -144,6 +144,7 @@ void update_centers(byte_t *data, double *centers, int *labels, double *dists, i
     }
 
     //Calculating sums and updating cluster counters
+    #pragma omp parallel for private(px, ch, min_k) reduction(+:centers[:n_clus * n_ch],counts[:n_clus])
     for (px = 0; px < n_px; px++) {
         min_k = labels[px];
 
@@ -155,6 +156,7 @@ void update_centers(byte_t *data, double *centers, int *labels, double *dists, i
     }
 
     //means
+    #pragma omp parallel for private(px, ch, min_k, k)
     for (k = 0; k < n_clus; k++) {
         if (counts[k]) {
             for (ch = 0; ch < n_ch; ch++) {
@@ -186,6 +188,7 @@ void update_image(byte_t *data, double *centers, int *labels, int n_px, int n_ch
 {
     int px, ch, min_k;
 
+    #pragma omp parallel for schedule(guided, 100) private(px, ch, min_k)
     for (px = 0; px < n_px; px++) {
         min_k = labels[px];
 
@@ -228,7 +231,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
         }
 
         update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
-        printf("Train step %d done\n", iter);
+        //printf("Train step %d done\n", iter);
     }
 
     update_image(data, centers, labels, n_px, n_channels);
@@ -256,7 +259,7 @@ void print_usage(char *pgr_name)
     fprintf(stderr, usage, pgr_name, 4, 150);
 }
 
-void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt)
+void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt, int n_threads)
 {
     char *details = "\nEXECUTION\n\n"
                     "  Image size              : %d x %d\n"
@@ -266,7 +269,8 @@ void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t 
                     "  Input Image Size        : %ld KB\n"
                     "  Output Image Size       : %ld KB\n"
                     "  Size diffrance          : %ld KB\n"
-                    "  Runtime                 : %f\n\n";
+                    "  Runtime                 : %f\n"
+                    "  Number of Threads       : %d\n\n";
 
     fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt);
 }
@@ -355,7 +359,7 @@ int main(int argc, char **argv)
     //Statistics
     off_t inSize = fsize(in_path);
     off_t outSize = fsize(out_path);
-    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt);
+    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt, n_threads);
 
 
     //Cleaning up
