@@ -101,26 +101,26 @@ void label_pixels(byte_t *data, double *centers, int *labels, double *dists, int
 
         for (k = 0; k < n_clus; k++) {
             dist = 0;
-
+            //Calculate disctance between pixel and center
             for (ch = 0; ch < n_ch; ch++) {
                 tmp = (double)(data[px * n_ch + ch] - centers[k * n_ch + ch]);
                 dist += tmp * tmp;
             }
-
+            //See if distance is MIN
             if (dist < min_dist) {
                 min_dist = dist;
                 min_k = k;
             }
         }
-
+        //save distance
         dists[px] = min_dist;
-
+        //Set label of pixel
         if (labels[px] != min_k) {
             labels[px] = min_k;
             tmp_changes = 1;
         }
     }
-
+    //Set changes flag, so we can pre quit if nothing changes
     *changes = tmp_changes;
 }
 
@@ -144,6 +144,7 @@ void update_centers(byte_t *data, double *centers, int *labels, double *dists, i
     }
 
     //Calculating sums and updating cluster counters
+    #pragma omp parallel for private(px, ch, min_k) reduction(+:centers[:n_clus * n_ch],counts[:n_clus])
     for (px = 0; px < n_px; px++) {
         min_k = labels[px];
 
@@ -155,6 +156,7 @@ void update_centers(byte_t *data, double *centers, int *labels, double *dists, i
     }
 
     //means
+    #pragma omp parallel for private(px, ch, min_k, k)
     for (k = 0; k < n_clus; k++) {
         if (counts[k]) {
             for (ch = 0; ch < n_ch; ch++) {
@@ -186,6 +188,7 @@ void update_image(byte_t *data, double *centers, int *labels, int n_px, int n_ch
 {
     int px, ch, min_k;
 
+    #pragma omp parallel for schedule(guided, 100) private(px, ch, min_k)
     for (px = 0; px < n_px; px++) {
         min_k = labels[px];
 
