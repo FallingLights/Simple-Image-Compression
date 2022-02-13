@@ -33,7 +33,7 @@ typedef unsigned char byte_t;
 
 int seed;
 
-byte_t *img_load(char *img_file, int *width, int *height, int *n_channels)
+byte_t *image_load(char *img_file, int *width, int *height, int *n_channels)
 {
     byte_t *data;
 
@@ -46,7 +46,7 @@ byte_t *img_load(char *img_file, int *width, int *height, int *n_channels)
     return data;
 }
 
-void img_save(char *img_file, byte_t *data, int width, int height, int n_channels)
+void image_save(char *img_file, byte_t *data, int width, int height, int n_channels)
 {
     char *ext;
 
@@ -57,7 +57,7 @@ void img_save(char *img_file, byte_t *data, int width, int height, int n_channel
         return;
     }
 
-    printf("Savin Image...\n");
+    //printf("Savin Image...\n");
 
     if ((strcmp(ext, ".jpeg") == 0) || (strcmp(ext, ".jpg") == 0)) {
         stbi_write_jpg(img_file, width, height, n_channels, data, 100);
@@ -224,7 +224,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     dt = omp_get_wtime() - dt;
     *init_time = dt;
     //Training
-    printf("Training...\n");
+    //printf("Training...\n");
     for (iter = 0; iter < max_iters; iter++) {
         dt = omp_get_wtime();
         label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
@@ -356,7 +356,7 @@ int main(int argc, char **argv)
     //srand(seed);
 
     //Loading image
-    data = img_load(in_path, &width, &height, &n_ch);
+    data = image_load(in_path, &width, &height, &n_ch);
 
     double init_time, label_time, centers_time;
     // Executing k-means segmentation
@@ -365,7 +365,7 @@ int main(int argc, char **argv)
     dt = omp_get_wtime() - dt;
 
     // Saving Image
-    img_save(out_path, data, width, height, n_ch);
+    image_save(out_path, data, width, height, n_ch);
 
     //Statistics
     off_t inSize = fsize(in_path);
