@@ -95,7 +95,7 @@ void label_pixels(byte_t *data, double *centers, int *labels, double *dists, int
     int min_k, tmp_changes = 0;
     double dist, min_dist, tmp;
 
-    #pragma omp parallel for schedule(guided, 100) private(px, ch, k, min_k, dist, min_dist, tmp)
+    #pragma omp parallel for schedule(guided, 1000) private(px, ch, k, min_k, dist, min_dist, tmp)
     for (px = 0; px < n_px; px++) {
         min_dist = DBL_MAX;
 
@@ -198,7 +198,7 @@ void update_image(byte_t *data, double *centers, int *labels, int n_px, int n_ch
     }
 }
 
-void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters, int n_threads)
+void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters, int n_threads, double *init_time, double *label_time, double *centers_time)
 {
     int n_px;
     int iter, max_iters;
@@ -219,18 +219,25 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     dists = malloc(n_px * sizeof(double));
 
     //Randomly set centers
+    double dt = omp_get_wtime();
     init_centers(data, centers, n_px, n_channels, n_clus);
-
+    dt = omp_get_wtime() - dt;
+    *init_time = dt;
     //Training
     printf("Training...\n");
     for (iter = 0; iter < max_iters; iter++) {
+        dt = omp_get_wtime();
         label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
-
+        dt = omp_get_wtime() - dt;
+        *label_time += dt;
         if (!changes) {
             break;
         }
 
+        dt = omp_get_wtime();
         update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
+        dt = omp_get_wtime() - dt;
+        *centers_time += dt;
         //printf("Train step %d done\n", iter);
     }
 
@@ -259,7 +266,7 @@ void print_usage(char *pgr_name)
     fprintf(stderr, usage, pgr_name, 4, 150);
 }
 
-void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt, int n_threads)
+void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt, int n_threads, double init_time, double label_time, double centers_time)
 {
     char *details = "\nEXECUTION\n\n"
                     "  Image size              : %d x %d\n"
@@ -270,9 +277,12 @@ void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t 
                     "  Output Image Size       : %ld KB\n"
                     "  Size diffrance          : %ld KB\n"
                     "  Runtime                 : %f\n"
-                    "  Number of Threads       : %d\n\n";
+                    "  Number of Threads       : %d\n"
+                    "  Initilization Time      : %f\n"
+                    "  Pixel Labeling Time     : %f\n"
+                    "  Computing Centroid Time : %f\n\n";
 
-    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt);
+    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt, n_threads,init_time, label_time, centers_time);
 }
 
 off_t fsize(const char *filename)
@@ -348,9 +358,10 @@ int main(int argc, char **argv)
     //Loading image
     data = img_load(in_path, &width, &height, &n_ch);
 
+    double init_time, label_time, centers_time;
     // Executing k-means segmentation
     double dt = omp_get_wtime();
-    kmeans(data, width, height, n_ch, n_clus, &n_iters, n_threads);
+    kmeans(data, width, height, n_ch, n_clus, &n_iters, n_threads, &init_time, &label_time, &centers_time);
     dt = omp_get_wtime() - dt;
 
     // Saving Image
@@ -359,7 +370,7 @@ int main(int argc, char **argv)
     //Statistics
     off_t inSize = fsize(in_path);
     off_t outSize = fsize(out_path);
-    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt, n_threads);
+    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt, n_threads, init_time, label_time, centers_time);
 
 
     //Cleaning up

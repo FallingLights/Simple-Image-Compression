@@ -6,7 +6,7 @@
  * @date 2022-02-12
  *
  * @copyright
- * @compile gcc -Wall -o serial.out serial.c -lm
+ * @compile gcc -Wall -o serial.out serial.c -lm -fopenmp -O2
  */
 #include <errno.h>
 #include <float.h>
@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <omp.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "include/stb_image.h"
@@ -51,7 +52,7 @@ void img_save(char *img_file, byte_t *data, int width, int height, int n_channel
         return;
     }
 
-    printf("Savin Image...\n");
+    //printf("Savin Image...\n");
 
     if ((strcmp(ext, ".jpeg") == 0) || (strcmp(ext, ".jpg") == 0)) {
         stbi_write_jpg(img_file, width, height, n_channels, data, 100);
@@ -184,7 +185,7 @@ void update_image(byte_t *data, double *centers, int *labels, int n_px, int n_ch
     }
 }
 
-void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters)
+void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters, double *init_time, double *label_time, double *centers_time)
 {
     int n_px;
     int iter, max_iters;
@@ -201,18 +202,27 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     centers = malloc(n_clus * n_channels * sizeof(double));
     dists = malloc(n_px * sizeof(double));
 
+    double dt = omp_get_wtime();
     init_centers(data, centers, n_px, n_channels, n_clus);
+    dt = omp_get_wtime() - dt;
+    *init_time = dt;
 
-    printf("Training...\n");
+    //printf("Training...\n");
     for (iter = 0; iter < max_iters; iter++) {
+        dt = omp_get_wtime();
         label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
+        dt = omp_get_wtime() - dt;
+        *label_time += dt;
 
-        if (!changes) {
+        /* if (!changes) { 
             break;
-        }
+        } */
 
+        dt = omp_get_wtime();
         update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
-        printf("Train step %d done\n", iter);
+        dt = omp_get_wtime() - dt;
+        *centers_time += dt;
+        //printf("Train step %d done\n", iter);
     }
 
     update_image(data, centers, labels, n_px, n_channels);
@@ -238,7 +248,7 @@ void print_usage(char *pgr_name)
     fprintf(stderr, usage, pgr_name, 4, 150);
 }
 
-void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize)
+void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt, double init_time, double label_time, double centers_time)
 {
     char *details = "\nEXECUTION\n\n"
                     "  Image size              : %d x %d\n"
@@ -247,9 +257,13 @@ void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t 
                     "  Number of iterations    : %d\n"
                     "  Input Image Size        : %ld KB\n"
                     "  Output Image Size       : %ld KB\n"
-                    "  Size diffrance          : %ld KB\n\n";
+                    "  Size diffrance          : %ld KB\n"
+                    "  Runtime                 : %f\n"
+                    "  Initilization Time      : %f\n"
+                    "  Pixel Labeling Time     : %f\n"
+                    "  Computing Centroid Time : %f\n\n";;
 
-    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000);
+    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt, init_time, label_time, centers_time);
 }
 
 off_t fsize(const char *filename)
@@ -324,7 +338,10 @@ int main(int argc, char **argv)
     data = img_load(in_path, &width, &height, &n_ch);
 
     // Executing k-means segmentation
-    kmeans(data, width, height, n_ch, n_clus, &n_iters);
+    double init_time, label_time, centers_time;
+    double dt = omp_get_wtime();
+    kmeans(data, width, height, n_ch, n_clus, &n_iters, &init_time, &label_time, &centers_time);
+    dt = omp_get_wtime() - dt;
 
     // Saving Image
     img_save(out_path, data, width, height, n_ch);
@@ -332,7 +349,7 @@ int main(int argc, char **argv)
     //Statistics
     off_t inSize = fsize(in_path);
     off_t outSize = fsize(out_path);
-    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize);
+    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt, init_time, label_time, centers_time);
 
 
     //Cleaning up
