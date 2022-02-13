@@ -34,7 +34,7 @@ typedef unsigned char byte_t;
 int seed;
 
 byte_t *image_load(char *img_file, int *width, int *height, int *n_channels)
-{
+{ //https://github.com/nothings/stb/blob/master/stb_image.h
     byte_t *data;
 
     data = stbi_load(img_file, width, height, n_channels, 0);
@@ -47,7 +47,7 @@ byte_t *image_load(char *img_file, int *width, int *height, int *n_channels)
 }
 
 void image_save(char *img_file, byte_t *data, int width, int height, int n_channels)
-{
+{ //https://github.com/nothings/stb/blob/master/stb_image_write.h
     char *ext;
 
     ext = strrchr(img_file, '.');
@@ -77,7 +77,7 @@ void init_centers(byte_t *data, double *centers, int n_px, int n_ch, int n_clus)
     int k, ch, rnd;
 
     #pragma omp parallel
-    {   
+    {   //https://pvs-studio.com/en/blog/posts/0012/
         srand((int)(seed) ^ omp_get_thread_num());
         #pragma omp for private(k, ch, rnd)
         for (k = 0; k < n_clus; k++) {
