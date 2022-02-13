@@ -1,6 +1,6 @@
-__kernel void labelPixels(__global byte_t *data, __global double *centers, int *labels, double *dists, int *changes, int n_px, int n_ch, int n_clus) {
+__kernel void labelPixels(__global byte_t *data, __global double *centers, __global int *labels, __global double *dists, int n_px, int n_ch, int n_clus) {
 
-	int idx = get_global_id(0);
+    int idx = get_global_id(0);
 
     int px, ch, k;
     int min_k, tmp_changes = 0;
@@ -31,7 +31,4 @@ __kernel void labelPixels(__global byte_t *data, __global double *centers, int *
             tmp_changes = 1;
         }
     }
-
-    if (tmp_changes == 1)
-        *changes++;
 }
