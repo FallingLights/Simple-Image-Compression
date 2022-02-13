@@ -214,9 +214,9 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
         dt = omp_get_wtime() - dt;
         *label_time += dt;
 
-        if (!changes) {
+        /* if (!changes) { 
             break;
-        }
+        } */
 
         dt = omp_get_wtime();
         update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);

@@ -12,3 +12,4 @@ result.*
 *.x86_64
 *.hex
 *.txt
+*.log

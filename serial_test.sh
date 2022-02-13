@@ -1,5 +1,13 @@
 #!/bin/bash
 
+#SBATCH --job-name=serial
+#SBATCH --output=results-serial.log
+#SBATCH --ntasks=1
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+#SBATCH --time=02:00:00
+#SBATCH --reservation=fri
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     -i|--input)
@@ -35,12 +43,19 @@ done
 
 set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
 
-
+rm serial_out*
 for ((i = 1 ; i <= $REPEAT ; i++)); do
-  srun --reservation=fri ./serial.out ~/Stiskanje-Slike-PS/images/png/bird.png -k $KLUSTERS -i $ITERATIONS  >> serial_out${i}.txt
+  ./serial.out ~/Stiskanje-Slike-PS/images/png/bird.png -k $KLUSTERS -i $ITERATIONS -s 12345  > serial_out${i}.txt
 done
 
-if [[ -n $1 ]]; then
-    echo "Last line of file specified as non-opt/last argument:"
-    tail -1 "$1"
-fi
+SUM=0
+rm times.txt
+for ((i = 1 ; i <= $REPEAT ; i++)); do
+    TEMP=$(awk -F':' '{print $2}' serial_out${i}.txt | grep -o '[0-9.]\+' | awk 'NR==9 {print $1}')
+    echo $TEMP >> times.txt
+    #SUM=$(($SUM + $TEMP))
+done
+
+sed -i 's/./,/' times.txt
+#OUT=$(($SUM / $REPEAT))
+#echo $OUT
