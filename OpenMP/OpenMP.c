@@ -7,7 +7,7 @@
  * 
  * Uporabil sem schedule(runtime) moreš nastaviti $ export OMP_SCHEDULE=static
  * @copyright
- * @compile gcc -Wall -o serial.out serial.c -lm -fopenm -O2
+ * @compile gcc -Wall -o openmp.out OpenMP.c -lm -fopenmp -O2
  */
 #include <errno.h>
 #include <float.h>
@@ -231,7 +231,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
         }
 
         update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
-        printf("Train step %d done\n", iter);
+        //printf("Train step %d done\n", iter);
     }
 
     update_image(data, centers, labels, n_px, n_channels);
