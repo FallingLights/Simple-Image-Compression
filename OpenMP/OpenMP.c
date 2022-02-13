@@ -95,7 +95,7 @@ void label_pixels(byte_t *data, double *centers, int *labels, double *dists, int
     int min_k, tmp_changes = 0;
     double dist, min_dist, tmp;
 
-    #pragma omp parallel for schedule(guided, 100) private(px, ch, k, min_k, dist, min_dist, tmp)
+    #pragma omp parallel for schedule(guided, 1000) private(px, ch, k, min_k, dist, min_dist, tmp)
     for (px = 0; px < n_px; px++) {
         min_dist = DBL_MAX;
 
