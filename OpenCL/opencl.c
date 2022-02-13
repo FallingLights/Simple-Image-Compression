@@ -147,6 +147,7 @@ void update_centers(byte_t *data, double *centers, int *labels, double *dists, i
     }
 
     //Calculating sums and updating cluster counters
+    #pragma omp parallel for private(px, ch, min_k) reduction(+:centers[:n_clus * n_ch],counts[:n_clus])
     for (px = 0; px < n_px; px++) {
         min_k = labels[px];
 
@@ -158,6 +159,7 @@ void update_centers(byte_t *data, double *centers, int *labels, double *dists, i
     }
 
     //means
+    #pragma omp parallel for private(px, ch, min_k, k)
     for (k = 0; k < n_clus; k++) {
         if (counts[k]) {
             for (ch = 0; ch < n_ch; ch++) {
