@@ -255,7 +255,6 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     cl_mem gpu_centers = clCreateBuffer(context, CL_MEM_READ_ONLY| CL_MEM_COPY_HOST_PTR, n_clus * n_channels * sizeof(double), centers, &ret);
     cl_mem gpu_labels = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, n_px * sizeof(int), labels, &ret);
     cl_mem gpu_dists = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, n_px * sizeof(double), dists, &ret);
-//    cl_mem gpu_changes = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int), NULL, &ret);
 
     cl_program program = clCreateProgramWithSource(context,	1, (const char **)&source_str, NULL, &ret);
 	ret = clBuildProgram(program, 1, &device_id[0], NULL, NULL, NULL);
@@ -285,35 +284,22 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     double updating = 0;
     printf("Training...\n");
     for (iter = 0; iter < max_iters; iter++) {
-//    	printf("asd\n");
-        //label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
-//        *changes = 0;
-//	printf("start\n");
+	    
 	double dt;
 	dt = omp_get_wtime();
         ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, NULL);
-//	printf("helo\n");
-      //  ret = clEnqueueReadBuffer(command_queue, gpu_changes, CL_TRUE, 0, sizeof(int), changes, 0, NULL, NULL);
-        //if (*changes == 0) {
-        //    break;
-        //}
+
         ret = clEnqueueReadBuffer(command_queue, gpu_data, CL_TRUE, 0, n_px * n_channels, data, 0, NULL, NULL);
-        //ret = clEnqueueReadBuffer(command_queue, gpu_centers, CL_TRUE, 0, n_px * sizeof(int), centers, 0, NULL, NULL);
         ret = clEnqueueReadBuffer(command_queue, gpu_labels, CL_TRUE, 0, n_px * sizeof(int), labels, 0, NULL, NULL);
         ret = clEnqueueReadBuffer(command_queue, gpu_dists, CL_TRUE, 0, n_px * sizeof(double), dists, 0, NULL, NULL);
-//	printf("Labeling %f\n", omp_get_wtime() - dt);
-	labeling += omp_get_wtime() - dt;
-//	printf("Po branju\n");
 
-	//printf("Pixels: %d\n", n_px);
-	//for (int i = 0; i < n_px; i++) {
-	//	printf("Pixel %d %f\n", i, dists[i]);
-	//}
+	labeling += omp_get_wtime() - dt;
+
+
 	dt = omp_get_wtime();
         update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
-//	printf("Updating %f\n", omp_get_wtime() - dt);
 	updating += omp_get_wtime() - dt;
-       // printf("Train step %d done\n", iter);
+   
     }
 
     update_image(data, centers, labels, n_px, n_channels);
@@ -327,7 +313,6 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     ret = clReleaseKernel(kernel);
     ret = clReleaseProgram(program);
     ret = clReleaseMemObject(gpu_data);
-//    ret = clReleaseMemObject(gpu_changes);
     ret = clReleaseMemObject(gpu_labels);
     ret = clReleaseMemObject(gpu_centers);
     ret = clReleaseMemObject(gpu_dists);
