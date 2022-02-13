@@ -259,7 +259,7 @@ void print_usage(char *pgr_name)
     fprintf(stderr, usage, pgr_name, 4, 150);
 }
 
-void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt)
+void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt, int n_threads)
 {
     char *details = "\nEXECUTION\n\n"
                     "  Image size              : %d x %d\n"
@@ -269,7 +269,8 @@ void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t 
                     "  Input Image Size        : %ld KB\n"
                     "  Output Image Size       : %ld KB\n"
                     "  Size diffrance          : %ld KB\n"
-                    "  Runtime                 : %f\n\n";
+                    "  Runtime                 : %f\n"
+                    "  Number of Threads       : %d\n\n";
 
     fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt);
 }
@@ -358,7 +359,7 @@ int main(int argc, char **argv)
     //Statistics
     off_t inSize = fsize(in_path);
     off_t outSize = fsize(out_path);
-    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt);
+    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt, n_threads);
 
 
     //Cleaning up
