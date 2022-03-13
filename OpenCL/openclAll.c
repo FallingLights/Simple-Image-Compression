@@ -7,7 +7,8 @@
  *
  * Uporabil sem schedule(runtime) moreš nastaviti $ export OMP_SCHEDULE=static
  * @copyright
- * @compile gcc -Wall -o serial.out serial.c -lm -fopenm -O2
+ * @compile gcc -Wall -o openclAll openclAll.c -lm -lOpenCL -fopenmp -O2
+ * @run srun -n1 -G1 --reservation=fri openclAll -k 30 -i 20 -w 128 -s 123456 -o out.png /ceph/grid/home/ag0001/Stiskanje-Slike-PS/images/png/bled.png
  */
 
 /**
