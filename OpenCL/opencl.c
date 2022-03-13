@@ -200,7 +200,7 @@ void update_image(byte_t *data, double *centers, int *labels, int n_px, int n_ch
     }
 }
 
-void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters, int n_threads)
+void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int *n_iters, int n_threads, int workgroupsize)
 {
     int n_px;
     int iter, max_iters;
@@ -236,7 +236,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     fclose( fp );
 
 
-    size_t local_item_size = WORKGROUP_SIZE;
+    size_t local_item_size = workgroupsize;
 	size_t num_groups = n_px / local_item_size;
 	size_t global_item_size = num_groups * local_item_size;
 
@@ -255,6 +255,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     cl_mem gpu_centers = clCreateBuffer(context, CL_MEM_READ_ONLY| CL_MEM_COPY_HOST_PTR, n_clus * n_channels * sizeof(double), centers, &ret);
     cl_mem gpu_labels = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, n_px * sizeof(int), labels, &ret);
     cl_mem gpu_dists = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, n_px * sizeof(double), dists, &ret);
+//    cl_mem gpu_changes = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int), NULL, &ret);
 
     cl_program program = clCreateProgramWithSource(context,	1, (const char **)&source_str, NULL, &ret);
 	ret = clBuildProgram(program, 1, &device_id[0], NULL, NULL, NULL);
@@ -284,22 +285,35 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     double updating = 0;
     printf("Training...\n");
     for (iter = 0; iter < max_iters; iter++) {
-	    
-	double dt;
-	dt = omp_get_wtime();
+        //    	printf("asd\n");
+        //label_pixels(data, centers, labels, dists, &changes, n_px, n_channels, n_clus);
+        //        *changes = 0;
+        //	printf("start\n");
+        double dt;
+        dt = omp_get_wtime();
         ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, NULL);
-
+        //	printf("helo\n");
+        //  ret = clEnqueueReadBuffer(command_queue, gpu_changes, CL_TRUE, 0, sizeof(int), changes, 0, NULL, NULL);
+        //if (*changes == 0) {
+        //    break;
+        //}
         ret = clEnqueueReadBuffer(command_queue, gpu_data, CL_TRUE, 0, n_px * n_channels, data, 0, NULL, NULL);
+        //ret = clEnqueueReadBuffer(command_queue, gpu_centers, CL_TRUE, 0, n_px * sizeof(int), centers, 0, NULL, NULL);
         ret = clEnqueueReadBuffer(command_queue, gpu_labels, CL_TRUE, 0, n_px * sizeof(int), labels, 0, NULL, NULL);
         ret = clEnqueueReadBuffer(command_queue, gpu_dists, CL_TRUE, 0, n_px * sizeof(double), dists, 0, NULL, NULL);
+        //	printf("Labeling %f\n", omp_get_wtime() - dt);
+	    labeling += omp_get_wtime() - dt;
+        //	printf("Po branju\n");
 
-	labeling += omp_get_wtime() - dt;
-
-
-	dt = omp_get_wtime();
-        update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
-	updating += omp_get_wtime() - dt;
-   
+        //printf("Pixels: %d\n", n_px);
+        //for (int i = 0; i < n_px; i++) {
+        //	printf("Pixel %d %f\n", i, dists[i]);
+        //}
+        dt = omp_get_wtime();
+            update_centers(data, centers, labels, dists, n_px, n_channels, n_clus);
+        //	printf("Updating %f\n", omp_get_wtime() - dt);
+        updating += omp_get_wtime() - dt;
+        // printf("Train step %d done\n", iter);
     }
 
     update_image(data, centers, labels, n_px, n_channels);
@@ -313,6 +327,7 @@ void kmeans(byte_t *data, int width, int height, int n_channels, int n_clus, int
     ret = clReleaseKernel(kernel);
     ret = clReleaseProgram(program);
     ret = clReleaseMemObject(gpu_data);
+//    ret = clReleaseMemObject(gpu_changes);
     ret = clReleaseMemObject(gpu_labels);
     ret = clReleaseMemObject(gpu_centers);
     ret = clReleaseMemObject(gpu_dists);
@@ -338,7 +353,7 @@ void print_usage(char *pgr_name)
     fprintf(stderr, usage, pgr_name, 4, 150);
 }
 
-void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt)
+void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t inSize, off_t outSize, double dt, int workgroupsize)
 {
     char *details = "\nEXECUTION\n\n"
                     "  Image size              : %d x %d\n"
@@ -348,9 +363,10 @@ void print_exec(int width, int height, int n_ch, int n_clus, int n_iters, off_t 
                     "  Input Image Size        : %ld KB\n"
                     "  Output Image Size       : %ld KB\n"
                     "  Size diffrance          : %ld KB\n"
-                    "  Runtime                 : %f\n\n";
+                    "  Runtime                 : %f\n"
+		            "  WorkGroupSize	       : %d\n\n";
 
-    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt);
+    fprintf(stdout, details, width, height, n_ch, n_clus, n_iters, inSize / 1000, outSize / 1000, (inSize - outSize) / 1000, dt, workgroupsize);
 }
 
 off_t fsize(const char *filename)
@@ -375,11 +391,12 @@ int main(int argc, char **argv)
     byte_t *data;
     seed = time(NULL);
     char *in_path = NULL;
+    int workgroupsize;
 
     // Parsing arguments and optional parameters
     // https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
     char optchar;
-    while ((optchar = getopt(argc, argv, "k:i:o:s:t:h")) != -1) {
+    while ((optchar = getopt(argc, argv, "k:i:o:s:t:w:h")) != -1) {
         switch (optchar) {
         case 'k':
             n_clus = strtol(optarg, NULL, 10);
@@ -396,12 +413,15 @@ int main(int argc, char **argv)
         case 't':
             n_threads = strtol(optarg, NULL, 10);
             break;
-        case 'h':
-        default:
-            print_usage(argv[0]);
-            exit(EXIT_FAILURE);
+        case 'w':
+            workgroupsize = strtol(optarg, NULL, 10);
             break;
-        }
+        case 'h':
+            default:
+                print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+                break;
+            }
     }
 
     in_path = argv[optind];
@@ -428,7 +448,7 @@ int main(int argc, char **argv)
 
     // Executing k-means segmentation
     double dt = omp_get_wtime();
-    kmeans(data, width, height, n_ch, n_clus, &n_iters, n_threads);
+    kmeans(data, width, height, n_ch, n_clus, &n_iters, n_threads, workgroupsize);
     dt = omp_get_wtime() - dt;
 
     // Saving Image
@@ -437,7 +457,7 @@ int main(int argc, char **argv)
     //Statistics
     off_t inSize = fsize(in_path);
     off_t outSize = fsize(out_path);
-    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt);
+    print_exec(width, height, n_ch, n_clus, n_iters, inSize, outSize, dt, workgroupsize);
 
 
     //Cleaning up
@@ -445,4 +465,5 @@ int main(int argc, char **argv)
 
     return EXIT_SUCCESS;
 }
+
 

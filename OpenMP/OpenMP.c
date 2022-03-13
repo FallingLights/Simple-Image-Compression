@@ -28,6 +28,16 @@
 #include "include/stb_image_write.h"
 
 #define N_THREADS 2
+//TODO: Polej če na istem serverju vse testira, 
+// poglej stevilo zgresitev
+// https://e6.ijs.si/~arashkovska/docs/pub/2014_CAS_Super_Linear_Speedup.pdf
+// https://stackoverflow.com/questions/4332967/where-does-super-linear-speedup-come-from
+/**
+ * 
+ * 
+ */
+
+
 
 typedef unsigned char byte_t;
 
