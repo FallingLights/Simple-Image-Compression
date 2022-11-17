@@ -181,9 +181,8 @@ Project Link: [https://github.com/FallingLights/Simple-Image-Compression](https:
 [issues-shield]: https://img.shields.io/github/issues/FallingLights/Simple-Image-Compression.svg?style=for-the-badge
 [issues-url]: https://github.com/FallingLights/Simple-Image-Compression/issues
 [license-shield]: https://img.shields.io/github/license/FallingLights/Simple-Image-Compression.svg?style=for-the-badge
-[license-url]: https://github.com/FallingLights/Simple-Image-Compression/blob/master/LICENSE.txt
+[license-url]: https://github.com/FallingLights/Simple-Image-Compression/blob/master/LICENSE
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/aleksander-gomilšek
-[product-screenshot]: images/screenshot.png
 [C]: https://img.shields.io/badge/c-%2300599C.svg?style=for-the-badge&logo=c&logoColor=white
 [C++]: https://img.shields.io/badge/c++-%2300599C.svg?style=for-the-badge&logo=c%2B%2B&logoColor=white
